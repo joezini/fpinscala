@@ -43,6 +43,78 @@ trait Stream[+A] {
     go(this)
   }
 
+
+  def takeJoe(n: Int): Stream[A] = this match {
+    case Cons(h,t) if n >= 1 => cons(h(), t().takeJoe(n-1))
+    case Cons(h,_) if n == 1 => cons(h(), empty)
+    case _ => empty
+  }
+
+  def dropJoe(n: Int): Stream[A] = this match {
+    case Cons(h,t) if n >= 1 => t().dropJoe(n-1)
+    case Cons(h,t) if n == 1 => t()
+    case _ => this
+  }
+
+  def takeWhileJoe(p: A => Boolean): Stream[A] = this match {
+    case Cons(h,t) if p(h()) => cons(h(), t().takeWhileJoe(p))
+    case _ => empty
+  }
+
+  def takeWhileFoldRight(p: A => Boolean): Stream[A] =
+    foldRight(empty[A])((h, t) => if (p(h)) cons(h,t) else empty)
+
+  def forAllJoe(p: A => Boolean): Boolean = this match {
+    case Cons(h,t) => p(h()) && t().forAllJoe(p)
+    case _ => true
+  }
+
+  def foldRightLazy[B](z: => B)(f: (A, => B) => B): B =
+    this match {
+      case Cons(h,t) => f(h(), t().foldRight(z)(f))
+      case _ => z
+    }
+
+  def forAllFoldRight(p: A => Boolean): Boolean =
+    foldRightLazy(true)((h,t) => p(h) && t)
+
+  def headOptionFoldRight: Option[A] =
+    foldRightLazy(None: Option[A])((h,t) => Some(h))
+
+  def mapFoldRight[B](f: A => B): Stream[B] =
+    foldRightLazy(empty[B])((h,t) => cons(f(h),t))
+
+  def filterFoldRight(f: A => Boolean): Stream[A] =
+    foldRightLazy(empty[A])((h,t) => if (f(h)) cons(h,t) else t)
+
+  def appendFoldRight[AA >: A](stream: => Stream[AA]): Stream[AA] =
+    foldRightLazy(stream)((h,t) => cons(h,t))
+
+  def flatMapFoldRight[B](f: A => Stream[B]): Stream[B] =
+    foldRightLazy(empty[B])((h,t) => f(h).appendFoldRight(t))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   /*
     Create a new Stream[A] from taking the n first elements from this. We can achieve that by recursively
     calling take on the invoked tail of a cons cell. We make sure that the tail is not invoked unless
@@ -195,6 +267,56 @@ case object Empty extends Stream[Nothing]
 case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
 
 object Stream {
+  def constantJoe[A](a: A):Stream[A] = {
+    lazy val gen: Stream[A] = cons(a, gen)
+    gen
+  }
+
+  def fromJoe(n: Int): Stream[Int] = {
+    cons(n, fromJoe(n + 1))
+  }
+
+  def fibsJoe: Stream[Int] = {
+
+    def make(a: Int, b: Int): Stream[Int] = {
+      cons(a, make(b, a + b))
+    }
+    make(0, 1)
+  }
+
+  def unfoldJoe[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] = {
+
+    def make(acc: S): Stream[A] = {
+      cons(f(z), make(f(z)))
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   def cons[A](hd: => A, tl: => Stream[A]): Stream[A] = {
     lazy val head = hd
     lazy val tail = tl
@@ -254,4 +376,90 @@ object Stream {
 
   // could also of course be implemented as constant(1)
   val onesViaUnfold = unfold(1)(_ => Some((1,1)))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+object lazyApp extends App {
+  val testStream = cons(1, cons(2, cons(3, cons(4, empty))))
+  def isOdd(x: Int): Boolean = {
+    x % 2 != 0
+  }
+  def lessThanFive(x: Int): Boolean = {
+    x < 5
+  }
+  def lessThanThree(x: Int): Boolean = {
+    x < 3
+  }
+  def treble(x: Int): Int = {
+    x * 3
+  }
+
+  println("Take test: expect List(1, 2) -> " + testStream.takeJoe(2).toList)
+  println("Take test too many: expect List(1, 2, 3, 4) -> " + testStream.takeJoe(5).toList)
+  println("Drop test: expect List(3, 4) -> " + testStream.dropJoe(2).toList)
+  println("Drop test too many: expect List() -> " + testStream.dropJoe(5).toList)
+  println("takeWhile test: expect List(1) -> " + testStream.takeWhileJoe(isOdd).toList)
+  println("takeWhileFoldRight test: expect List(1, 2) -> " + testStream.takeWhileFoldRight(lessThanThree).toList)
+  println("forAll test: expect false -> " + testStream.forAllJoe(isOdd).toString())
+  println("forAll test: expect true -> " + testStream.forAllJoe(lessThanFive).toString())
+  println("forAllFoldRight test: expect false -> " + testStream.forAllFoldRight(isOdd).toString())
+  println("forAllFoldRight test: expect true -> " + testStream.forAllFoldRight(lessThanFive).toString())
+  println("headOptionFoldRight test: expect Some(1) -> " + testStream.headOptionFoldRight.toString())
+  println("headOptionFoldRight test: expect None -> " + Empty.headOptionFoldRight.toString())
+  println("mapFoldRight test: expect List(3, 6, 9, 12) -> " + testStream.mapFoldRight(treble).toList)
+  println("filterFoldRight test: expect List(1, 3) -> " + testStream.filterFoldRight(isOdd).toList)
+  println("appendFoldRight test: expect List(1, 2, 3, 4, 1, 2, 3, 4) -> " + testStream.appendFoldRight(testStream).toList)
+  println("appendFoldRight test: expect List(1, 2, 3, 4) -> " + testStream.appendFoldRight(empty).toList)
+  println("appendFoldRight test: expect List() -> " + empty.appendFoldRight(empty).toList)
+  println("flatMapFoldRight test: expect List(1, 2, 2, 3, 4, 4, 5) -> " + testStream.flatMapFoldRight(x => Stream(x, x + 1)).toList)
+  println("constantJoe test: expect List('a', 'a', 'a') -> " + Stream.constantJoe('a').take(3).toList)
+  println("fromJoe test: expect List(3, 4, 5, 6) -> " + Stream.from(3).take(4).toList)
+  println("fibsJoe test: expect List(0, 1, 1, 2, 3, 5, 8) -> " + Stream.fibsJoe.take(7).toList)
 }
